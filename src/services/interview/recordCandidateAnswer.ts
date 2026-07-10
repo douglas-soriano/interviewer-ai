@@ -9,6 +9,7 @@ import { ConflictError, NotFoundError } from "@/lib/errors";
 import { getLlmProvider } from "@/providers/llm/getLlmProvider";
 import type { LlmProvider } from "@/providers/llm/llmProvider";
 import { sessionRepository } from "@/repositories/sessionRepository";
+import { aggregateFinalEvaluation } from "@/services/evaluation/aggregateFinalEvaluation";
 import { buildSessionPanel } from "./buildSessionPanel";
 import { detectManipulation } from "./detectManipulation";
 import { generateNextQuestion } from "./generateNextQuestion";
@@ -84,6 +85,19 @@ export async function recordCandidateAnswer(
     };
   }
 
+  if (manipulation.suspected) {
+    decision.signals = decision.signals.filter(
+      (signal) => signal.polarity === "red_flag",
+    );
+    decision.questionType = "redirect";
+    decision.shouldEnd = false;
+
+    if (!decision.nextQuestion.trim()) {
+      decision.nextQuestion =
+        "Let's stay with the interview. Tell me about a real example from your work that fits this role.";
+    }
+  }
+
   await sessionRepository.updateTurn(currentTurn.id, {
     answerTranscript: input.transcript,
     decision,
@@ -93,22 +107,20 @@ export async function recordCandidateAnswer(
   currentTurn.decision = decision;
 
   if (decision.shouldEnd) {
+    const finalEvaluation = aggregateFinalEvaluation(session.job, session.turns);
+
     await sessionRepository.update(sessionId, {
       status: "completed",
+      finalEvaluation,
       completedAt: new Date(),
     });
 
-    const completedSession = await sessionRepository.find(sessionId, {
-      relations: ["turns", "job"],
-    });
-    const turns = completedSession?.turns ?? session.turns;
-
     return {
       decision,
-      panel: buildSessionPanel(session.job, turns),
+      panel: buildSessionPanel(session.job, session.turns),
       completed: true,
       nextTurn: null,
-      finalEvaluation: completedSession?.finalEvaluation ?? null,
+      finalEvaluation,
     };
   }
 
