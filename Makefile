@@ -1,7 +1,13 @@
-.PHONY: install dev build start typecheck db-up db-down db-logs db-generate db-push db-seed
+.PHONY: install bootstrap dev build start typecheck db-up db-down db-logs db-generate db-push db-seed
 
 install:
 	npm install
+
+bootstrap:
+	npm install
+	docker compose up -d db
+	npm run db:push
+	npm run db:seed
 
 dev:
 	npm run dev
