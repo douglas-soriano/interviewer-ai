@@ -46,7 +46,11 @@ export function Transcript({ turns }: { turns: ClientTurn[] }) {
                 Candidate answer
               </p>
               <p className="text-sm leading-6 text-[var(--text-secondary)]">
-                {turn.answerTranscript ?? "No answer recorded in this placeholder turn."}
+                {turn.answerTranscript ?? (
+                  <span className="italic text-[var(--text-faint)]">
+                    No answer recorded
+                  </span>
+                )}
               </p>
             </div>
             {turn.decision?.reasoning && (
