@@ -1,7 +1,11 @@
+"use client";
+
 import Image from "next/image";
 import { Sparkle, Target } from "@phosphor-icons/react";
 import type { Decision, Signal } from "@/domain/interview";
+import type { VoiceRecording } from "@/hooks/useVoiceCapture";
 import type { ClientTurn } from "@/lib/serializers";
+import { AudioMessage } from "./AudioMessage";
 
 const QUESTION_TYPE_LABELS: Record<ClientTurn["questionType"], string> = {
   opening: "Opening",
@@ -109,10 +113,12 @@ function AssistantBubble({
 
 function CandidateBubble({
   answer,
+  audio,
   analyticsVisible,
   decision,
 }: {
   answer: string;
+  audio: VoiceRecording | null;
   analyticsVisible: boolean;
   decision: Decision | null;
 }) {
@@ -124,7 +130,15 @@ function CandidateBubble({
           <span className="font-semibold text-[var(--text-primary)]">You</span>
           <span>Voice answer</span>
         </div>
-        <p className="whitespace-pre-wrap text-[15px] leading-7">{answer}</p>
+        {audio ? (
+          <AudioMessage
+            url={audio.url}
+            durationMs={audio.durationMs}
+            transcript={answer}
+          />
+        ) : (
+          <p className="whitespace-pre-wrap text-[15px] leading-7">{answer}</p>
+        )}
         {analyticsVisible && decision && <SignalList signals={decision.signals} />}
       </div>
       <CandidateAvatar />
@@ -132,13 +146,13 @@ function CandidateBubble({
   );
 }
 
-function ThinkingBubble() {
+function ThinkingBubble({ text }: { text: string }) {
   return (
     <article className="flex items-start gap-3" aria-live="polite">
       <AiAvatar />
       <div className="max-w-[760px] rounded-[18px] rounded-tl-[5px] border border-[#dedffa] bg-white px-[18px] py-[14px] text-[var(--text-primary)] shadow-[0_5px_18px_rgb(28_32_86/0.045)]">
         <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
-          <span>Drafting the next prompt</span>
+          <span>{text}</span>
           <span className="flex gap-1" aria-hidden>
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] [animation-delay:-160ms]" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] [animation-delay:-80ms]" />
@@ -156,12 +170,18 @@ export function InterviewChat({
   jobTitle,
   jobDescription,
   analyticsVisible,
+  thinking = false,
+  thinkingText = "Drafting the next prompt",
+  audioByTurn = {},
 }: {
   turns: ClientTurn[];
   interviewerName: string;
   jobTitle: string;
   jobDescription: string;
   analyticsVisible: boolean;
+  thinking?: boolean;
+  thinkingText?: string;
+  audioByTurn?: Record<number, VoiceRecording>;
 }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-[#fdfdff]">
@@ -194,6 +214,7 @@ export function InterviewChat({
               {turn.answerTranscript && (
                 <CandidateBubble
                   answer={turn.answerTranscript}
+                  audio={audioByTurn[turn.index] ?? null}
                   analyticsVisible={analyticsVisible}
                   decision={turn.decision}
                 />
@@ -201,7 +222,7 @@ export function InterviewChat({
             </div>
           );
         })}
-        <ThinkingBubble />
+        {thinking && <ThinkingBubble text={thinkingText} />}
       </div>
     </section>
   );
