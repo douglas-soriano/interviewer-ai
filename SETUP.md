@@ -14,6 +14,8 @@ and a local Postgres database for development.
 cp .env.example .env
 npm install
 make db-up
+npm run db:push
+npm run db:seed
 npm run dev
 ```
 
@@ -44,5 +46,5 @@ postgresql://interviewer:interviewer@localhost:5432/interviewer
 ```
 
 Use `make db-up` to start Postgres and `make db-down` to stop it. The first
-foundation includes only the database wiring. Domain tables and seed data are
-added with the application data model.
+data backbone includes the job, session, and turn tables plus sample interview
+jobs for local development.
