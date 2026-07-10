@@ -312,8 +312,11 @@ export function InterviewRoom({
 
             {session.phase === "completed" && (
               <Notice tone="warning">
-                This interview is complete. You can return to the roles list and
-                review the session from the home screen.
+                {session.finalEvaluation
+                  ? `This interview is complete. Final score ${session.finalEvaluation.overallScore}/100.`
+                  : "This interview is complete."}{" "}
+                You can return to the roles list and review the session from the
+                home screen.
               </Notice>
             )}
           </div>

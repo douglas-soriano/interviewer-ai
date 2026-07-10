@@ -6,6 +6,7 @@ import type {
   CriterionCoverage,
   LlmProvider,
 } from "@/providers/llm/llmProvider";
+import { scoreSignals } from "@/services/evaluation/scoreSignals";
 import { isNonAnswer } from "./detectNonAnswer";
 
 export interface GenerateNextQuestionInput {
@@ -22,75 +23,23 @@ function computeCoverage(
   job: Job,
   history: Turn[],
 ): { coverage: CriterionCoverage[]; dimensions: DimensionScore[] } {
-  const positiveStrengthById = new Map<string, number>();
-  const positiveCountByDimension = new Map<DimensionScore["dimension"], number>([
-    ["technical", 0],
-    ["ownership", 0],
-    ["culture", 0],
-  ]);
-  const redFlagsByDimension = new Map<DimensionScore["dimension"], number>([
-    ["technical", 0],
-    ["ownership", 0],
-    ["culture", 0],
-  ]);
-  const signalStrengthByDimension = new Map<DimensionScore["dimension"], number>([
-    ["technical", 0],
-    ["ownership", 0],
-    ["culture", 0],
-  ]);
-
-  for (const turn of history) {
-    if (!turn.decision) {
-      continue;
-    }
-
-    for (const signal of turn.decision.signals) {
-      signalStrengthByDimension.set(
-        signal.dimension,
-        (signalStrengthByDimension.get(signal.dimension) ?? 0) + signal.strength,
-      );
-
-      if (signal.polarity === "positive") {
-        positiveCountByDimension.set(
-          signal.dimension,
-          (positiveCountByDimension.get(signal.dimension) ?? 0) + 1,
-        );
-        positiveStrengthById.set(
-          signal.criterionId,
-          Math.max(positiveStrengthById.get(signal.criterionId) ?? 0, signal.strength),
-        );
-      } else {
-        redFlagsByDimension.set(
-          signal.dimension,
-          (redFlagsByDimension.get(signal.dimension) ?? 0) + 1,
-        );
-      }
-    }
-  }
-
+  const decisions = history
+    .map((turn) => turn.decision)
+    .filter((decision): decision is NonNullable<Turn["decision"]> => decision !== null);
+  const scores = scoreSignals(job.rubric, decisions);
   const tierBySkillId = new Map(job.skills.map((skill) => [skill.id, skill.tier]));
-  const coverage = job.rubric.criteria.map((criterion) => ({
-    id: criterion.id,
-    label: criterion.label,
-    dimension: criterion.dimension,
-    type: criterion.type,
-    tier: tierBySkillId.get(criterion.id),
-    strength: positiveStrengthById.get(criterion.id) ?? 0,
-  }));
 
-  const dimensions = (["technical", "ownership", "culture"] as const).map(
-    (dimension) => ({
-      dimension,
-      score: Math.min(
-        100,
-        Math.round((signalStrengthByDimension.get(dimension) ?? 0) * 26),
-      ),
-      positives: positiveCountByDimension.get(dimension) ?? 0,
-      redFlags: redFlagsByDimension.get(dimension) ?? 0,
-    }),
-  );
-
-  return { coverage, dimensions };
+  return {
+    coverage: scores.criteria.map((criterion) => ({
+      id: criterion.id,
+      label: criterion.label,
+      dimension: criterion.dimension,
+      type: criterion.type,
+      tier: tierBySkillId.get(criterion.id),
+      strength: criterion.strength,
+    })),
+    dimensions: scores.dimensions,
+  };
 }
 
 export async function generateNextQuestion(

@@ -8,7 +8,7 @@ import { INTERVIEW_POLICY } from "@/domain/interviewPolicy";
 
 const DIMENSION_LABELS: Record<Dimension, string> = {
   technical: "Technical",
-  ownership: "Ownership",
+  ownership: "Ownership / Red flags",
   culture: "Culture fit",
 };
 
@@ -24,10 +24,36 @@ const STATUS_STYLES: Record<SkillCoverage["status"], string> = {
   gap: "border-[#ffd0cf] bg-[var(--danger-soft)] text-[#b3312e]",
 };
 
+function Bar({ score }: { score: number }) {
+  const color =
+    score >= 66
+      ? "accent-[#11b96c]"
+      : score >= 40
+        ? "accent-[#ff9b2f]"
+        : "accent-[#ff4d4a]";
+
+  return (
+    <progress
+      value={score}
+      max={100}
+      className={`h-2 w-full overflow-hidden rounded-full bg-[var(--meter-empty)] ${color}`}
+      aria-label={`Score ${score} out of 100`}
+    />
+  );
+}
+
 function SkillChip({ skill }: { skill: SkillCoverage }) {
+  const statusLabel =
+    skill.status === "demonstrated"
+      ? "demonstrated"
+      : skill.status === "partial"
+        ? "partial evidence"
+        : "no evidence yet";
+
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1 text-[11px] font-medium ${STATUS_STYLES[skill.status]}`}
+      title={`${TIER_LABELS[skill.tier]} - ${statusLabel}`}
     >
       {skill.label}
       <span className="rounded-[4px] bg-white/60 px-1 text-[9px] font-semibold uppercase tracking-wide opacity-80">
@@ -47,40 +73,49 @@ export function DecisionPanel({ panel }: { panel: Panel }) {
       aria-label="Interviewer decision panel"
       className="flex flex-col gap-5 rounded-[12px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-card)]"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[15px] font-bold leading-5 text-[var(--text-primary)]">
-            Interview progress
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-            Live coverage of the interview signals collected so far.
-          </p>
-        </div>
-        <span className="shrink-0 rounded-[7px] bg-[var(--primary-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">
-          {panel.questionsAsked}/{INTERVIEW_POLICY.MAX_QUESTIONS}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-bold leading-5 text-[var(--text-primary)]">
+          Interview progress
+        </h2>
+        <span className="text-right text-xs leading-5 text-[var(--text-muted)]">
+          {panel.questionsAsked}/{INTERVIEW_POLICY.MAX_QUESTIONS} questions
+          <br />
+          {panel.followUps}/{INTERVIEW_POLICY.MAX_FOLLOWUPS} follow-ups
         </span>
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-4">
         {panel.dimensions.map((dimension) => (
-          <div
-            key={dimension.dimension}
-            className="rounded-[10px] border border-[#e5e7f1] bg-[#fbfbff] p-3"
-          >
-            <div className="flex items-center justify-between gap-3">
+          <div key={dimension.dimension}>
+            <div className="mb-1 flex items-center justify-between gap-3">
               <span className="text-sm text-[var(--text-secondary)]">
                 {DIMENSION_LABELS[dimension.dimension]}
               </span>
-              <span className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+              <span className="text-sm font-medium tabular-nums text-[var(--text-primary)]">
                 {dimension.score}
+                {dimension.redFlags > 0 && (
+                  <span className="ml-2 text-[#d83c39]">
+                    Red flags {dimension.redFlags}
+                  </span>
+                )}
               </span>
             </div>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
+            <Bar score={dimension.score} />
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
               {dimension.positives} positive signals, {dimension.redFlags} red flags
             </p>
           </div>
         ))}
       </div>
+
+      {panel.lastGuardrail && (
+        <div className="rounded-[8px] border border-[var(--danger-border)] bg-[var(--danger-soft)] p-3 text-sm text-[#a6302d]">
+          <span className="font-semibold">
+            Guardrail ({panel.lastGuardrail.type}):
+          </span>{" "}
+          {panel.lastGuardrail.note}
+        </div>
+      )}
 
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
