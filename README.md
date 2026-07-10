@@ -1,12 +1,12 @@
 # Interviewer AI
 
-<img src="https://github.com/user-attachments/assets/b59f580d-08b7-4adc-8e9b-450e0bd6d1e3" />
+<img src="https://github.com/user-attachments/assets/f1029467-f8e3-4538-b48f-dbd8bb240a02" />
 
 ## 1. Overview
 
 Interviewer AI is a voice-based interview app built to help candidates practice technical interviews.
 
-<img alt="InterviewerAI_Screen_01" src="https://github.com/user-attachments/assets/cd49a1a4-bccb-412b-9b7d-1ad1733e837b" />
+<img src="https://github.com/user-attachments/assets/16002ef2-84f0-4551-8094-d77859fdf9bb" />
 
 The interviewer listens to each answer, reviews its content, and creates the next question based on what the candidate said. At the end of the session, the app shows the full transcript, the interviewer's reasoning, and a final score.
 
