@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft, Plus } from "@phosphor-icons/react/dist/ssr";
-import type { PublicJob } from "@/domain/session";
+import type { Job } from "@/domain/session";
 
-export function SettingsList({ jobs }: { jobs: PublicJob[] }) {
+export function SettingsList({ jobs }: { jobs: Job[] }) {
   return (
     <div className="app-shell">
-      <main className="mx-auto max-w-[900px] px-5 pb-16 pt-10 sm:px-6 sm:pt-12">
+      <main className="mx-auto max-w-[860px] px-6 pb-16 pt-12">
         <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <Link
@@ -18,9 +18,10 @@ export function SettingsList({ jobs }: { jobs: PublicJob[] }) {
             <h1 className="m-0 text-[28px] font-bold leading-9 tracking-[-0.7px] text-[#080a31]">
               Job settings
             </h1>
-            <p className="m-0 mt-2 max-w-[560px] text-sm leading-6 text-[#59628c]">
-              Visual placeholder for job configuration. Data is mocked in this
-              phase.
+            <p className="m-0 mt-2 max-w-[540px] text-sm leading-6 text-[#59628c]">
+              Each job defines the skills the interviewer must probe and the
+              question bank it adapts. The evaluation stays anchored to exactly
+              what you register here.
             </p>
           </div>
           <Link
@@ -33,28 +34,38 @@ export function SettingsList({ jobs }: { jobs: PublicJob[] }) {
         </header>
 
         <div className="overflow-hidden rounded-[13px] border border-[var(--border)] bg-white shadow-[var(--shadow-card)]">
-          {jobs.map((job) => (
-            <Link
-              key={job.id}
-              href="/settings/new"
-              className="grid gap-3 border-b border-[var(--border-soft)] px-5 py-4 transition last:border-b-0 hover:bg-[#fafaff] sm:grid-cols-[1fr_auto_auto] sm:items-center"
-            >
-              <div className="min-w-0">
-                <p className="m-0 truncate text-[14px] font-semibold leading-5 text-[#22284f]">
-                  {job.title}
-                </p>
-                <p className="m-0 mt-0.5 line-clamp-1 text-xs leading-5 text-[#7e85a7]">
-                  {job.description}
-                </p>
-              </div>
-              <span className="w-fit rounded-[6px] bg-[var(--primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[#615cf2]">
-                {job.essentialSkills.length} essential skills
-              </span>
-              <span className="w-fit rounded-[6px] bg-[#f4f4fb] px-2.5 py-1 text-[11px] font-medium text-[#59628c]">
-                Visual draft
-              </span>
-            </Link>
-          ))}
+          {jobs.map((job) => {
+            const essential = job.skills.filter((skill) => skill.tier === "essential")
+              .length;
+
+            return (
+              <Link
+                key={job.id}
+                href={`/settings/${job.id}`}
+                className="flex items-center gap-4 border-b border-[var(--border-soft)] px-5 py-4 transition last:border-b-0 hover:bg-[#fafaff]"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 truncate text-[14px] font-semibold leading-5 text-[#22284f]">
+                    {job.title}
+                  </p>
+                  <p className="m-0 mt-0.5 line-clamp-1 text-xs leading-5 text-[#7e85a7]">
+                    {job.description}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-[6px] bg-[var(--primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[#615cf2]">
+                  {job.skills.length} skills · {essential} essential
+                </span>
+                <span className="shrink-0 rounded-[6px] bg-[#f4f4fb] px-2.5 py-1 text-[11px] font-medium text-[#59628c]">
+                  {job.questions.length} questions
+                </span>
+              </Link>
+            );
+          })}
+          {jobs.length === 0 && (
+            <p className="px-5 py-8 text-sm text-[var(--text-secondary)]">
+              No jobs yet. Create the first one.
+            </p>
+          )}
         </div>
       </main>
     </div>

@@ -1,6 +1,9 @@
 import { SettingsList } from "@/components/settings/SettingsList";
-import { mockJobs } from "@/mock/interviewData";
+import { listAdminJobs } from "@/services/job/listAdminJobs";
 
-export default function SettingsPage() {
-  return <SettingsList jobs={mockJobs} />;
+export const dynamic = "force-dynamic";
+
+export default async function SettingsPage() {
+  const jobs = await listAdminJobs();
+  return <SettingsList jobs={jobs} />;
 }

@@ -25,9 +25,9 @@ export const JobUpsertSchema = z.object({
   slug: z
     .string()
     .trim()
-    .min(1, "Slug is required")
     .max(80)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must be URL safe"),
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must be URL safe")
+    .optional(),
   title: z.string().trim().min(1, "Title is required").max(120),
   description: z.string().trim().min(1, "Description is required").max(1000),
   persona: z.object({
