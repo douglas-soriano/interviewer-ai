@@ -41,7 +41,7 @@ function RoleCard({ job }: { job: PublicJob }) {
 
   return (
     <Link
-      href="/interview/mock"
+      href={`/interview/${job.id}`}
       className="group grid gap-4 rounded-[14px] border border-[var(--border)] bg-white px-5 py-5 shadow-[0_2px_8px_rgb(24_28_78/0.018)] transition hover:-translate-y-0.5 hover:border-[#cacdef] hover:shadow-[0_10px_26px_rgb(27_31_87/0.07)] sm:grid-cols-[58px_1fr_auto] sm:items-center sm:px-6"
     >
       <div
@@ -121,6 +121,8 @@ function HowItWorks() {
 }
 
 function RecentSessions({ interviews }: { interviews: InterviewHistoryItem[] }) {
+  if (interviews.length === 0) return null;
+
   const formatter = new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
@@ -137,7 +139,7 @@ function RecentSessions({ interviews }: { interviews: InterviewHistoryItem[] }) 
         {interviews.map((item) => (
           <Link
             key={item.id}
-            href="/results/mock"
+            href={`/results/${item.id}`}
             className="grid gap-3 border-b border-[var(--border-soft)] px-5 py-4 transition last:border-b-0 hover:bg-[#fafaff] sm:grid-cols-[1fr_auto_auto] sm:items-center"
           >
             <div className="min-w-0">
@@ -145,12 +147,19 @@ function RecentSessions({ interviews }: { interviews: InterviewHistoryItem[] }) 
                 {item.jobTitle}
               </p>
               <p className="m-0 mt-0.5 text-[11px] leading-4 text-[#7e85a7]">
-                {formatter.format(item.createdAt)}, {item.answeredQuestions} answers
+                {formatter.format(item.createdAt)} · {item.answeredQuestions}{" "}
+                {item.answeredQuestions === 1 ? "answer" : "answers"}
               </p>
             </div>
-            <span className="inline-flex h-[26px] w-fit items-center rounded-[6px] bg-[var(--success-soft)] px-2.5 text-[11px] font-semibold text-[#12a86a]">
-              Score {item.overallScore}
-            </span>
+            {item.status === "completed" && item.overallScore !== null ? (
+              <span className="inline-flex h-[26px] w-fit items-center rounded-[6px] bg-[var(--success-soft)] px-2.5 text-[11px] font-semibold text-[#12a86a]">
+                Score {item.overallScore}
+              </span>
+            ) : (
+              <span className="inline-flex h-[26px] w-fit items-center rounded-[6px] bg-[var(--primary-soft)] px-2.5 text-[11px] font-medium text-[#615cf2]">
+                {item.status === "completed" ? "Completed" : "In progress"}
+              </span>
+            )}
             <ArrowRight size={15} className="hidden text-[#9aa0c2] sm:block" aria-hidden />
           </Link>
         ))}
@@ -202,7 +211,7 @@ export function HomeDashboard({
           ))}
         </section>
 
-        <RecentSessions interviews={interviews} />
+        {interviews.length > 0 && <RecentSessions interviews={interviews} />}
       </main>
     </div>
   );
