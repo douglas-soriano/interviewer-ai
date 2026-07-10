@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type MicPermissionState = "checking" | "granted" | "denied";
+export type MicPermissionState =
+  | "checking"
+  | "granted"
+  | "denied"
+  | "unsupported";
 
 export function useMicPermission(): {
   state: MicPermissionState;
@@ -14,7 +18,7 @@ export function useMicPermission(): {
     setState("checking");
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setState("denied");
+      setState("unsupported");
       return;
     }
 

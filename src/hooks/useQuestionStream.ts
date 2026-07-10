@@ -7,6 +7,7 @@ import type {
   FinalEvaluation,
   QuestionType,
 } from "@/domain/interview";
+import { getUiErrorMessage } from "@/lib/uiError";
 
 export interface StreamDonePayload {
   completed: boolean;
@@ -49,16 +50,25 @@ export function useQuestionStream() {
 
       const contentType = response.headers.get("content-type") ?? "";
       if (!response.ok || !contentType.includes("text/event-stream")) {
-        const message = await response
+        const failure = await response
           .json()
-          .then((json) => json?.message as string | undefined)
+          .then(
+            (json) =>
+              json as { message?: string; code?: string } | undefined,
+          )
           .catch(() => undefined);
-        handlers.onError(message ?? "The interviewer could not process that answer.");
+        handlers.onError(
+          failure
+            ? getUiErrorMessage(failure, "submit")
+            : "The interviewer could not process that answer.",
+        );
         return;
       }
 
       if (!response.body) {
-        handlers.onError("The interviewer returned an empty response stream.");
+        handlers.onError(
+          "The next question stream ended before the interviewer replied. Retry this answer.",
+        );
         return;
       }
 
@@ -117,13 +127,15 @@ export function useQuestionStream() {
         }
       } catch {
         handlers.onError(
-          "The connection dropped while receiving the next question.",
+          "The next question stream was interrupted. Retry this answer to continue.",
         );
         return;
       }
 
       if (!sawDone) {
-        handlers.onError("The interviewer response was incomplete. Please retry.");
+        handlers.onError(
+          "The interviewer response was incomplete. Retry this answer to continue.",
+        );
       }
     },
     [],
