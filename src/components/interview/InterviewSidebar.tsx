@@ -56,13 +56,21 @@ export function InterviewSidebar({
   jobDescription,
 }: {
   analyticsVisible: boolean;
-  panel: Panel;
+  panel: Panel | null;
   jobDescription: string;
 }) {
   return (
     <aside className="soft-scrollbar flex max-h-[calc(100dvh-var(--interview-header-height))] flex-col gap-5 overflow-y-auto border-l border-[var(--border-soft)] bg-[var(--sidebar-bg)] p-5">
       {analyticsVisible ? (
-        <DecisionPanel panel={panel} />
+        panel ? (
+          <DecisionPanel panel={panel} />
+        ) : (
+          <SidebarCard title="Interview progress">
+            <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+              Analytics will appear after the first answer is processed.
+            </p>
+          </SidebarCard>
+        )
       ) : (
         <>
           <SidebarCard title="Interview brief">

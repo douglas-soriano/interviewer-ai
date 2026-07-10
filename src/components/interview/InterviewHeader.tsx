@@ -35,7 +35,7 @@ export function InterviewHeader({
       <div className="ml-auto flex shrink-0 items-center gap-2 min-[560px]:gap-3">
         <span className="hidden h-9 items-center gap-2 rounded-[10px] border border-[#dff1e8] bg-[var(--success-soft)] px-3 text-xs font-medium text-[#158b59] sm:inline-flex">
           <span className="h-2 w-2 rounded-full bg-[var(--success)]" aria-hidden />
-          Mock session
+          Live session
         </span>
         <AnalyticsToggle enabled={analyticsVisible} onChange={onAnalyticsChange} />
       </div>

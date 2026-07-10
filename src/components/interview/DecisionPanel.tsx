@@ -53,7 +53,7 @@ export function DecisionPanel({ panel }: { panel: Panel }) {
             Interview progress
           </h2>
           <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-            Placeholder analytics for this static shell.
+            Live coverage of the interview signals collected so far.
           </p>
         </div>
         <span className="shrink-0 rounded-[7px] bg-[var(--primary-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">

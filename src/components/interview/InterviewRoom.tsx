@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -8,49 +8,17 @@ import {
   CircleNotch,
   Microphone,
   MicrophoneSlash,
+  WarningCircle,
 } from "@phosphor-icons/react";
-import type { Decision, DecisionPanel } from "@/domain/interview";
-import type { BankQuestion, Dimension, JobSkill } from "@/domain/interview";
-import { INTERVIEW_POLICY } from "@/domain/interviewPolicy";
-import { INTERVIEW_UI } from "@/config/interviewUi";
+import type { BankQuestion, JobSkill } from "@/domain/interview";
+import { useInterviewSession } from "@/hooks/useInterviewSession";
 import { useMicPermission } from "@/hooks/useMicPermission";
-import { useVoiceCapture } from "@/hooks/useVoiceCapture";
-import type { VoiceRecording } from "@/hooks/useVoiceCapture";
-import type { ClientTurn } from "@/lib/serializers";
 import { InterviewChat } from "./InterviewChat";
 import { InterviewHeader } from "./InterviewHeader";
 import { InterviewSidebar } from "./InterviewSidebar";
 import { RecordButton } from "./RecordButton";
 
 const PREPARING_DELAY_MS = 650;
-const THINKING_DELAY_MS = 950;
-const TIME_LIMIT = INTERVIEW_POLICY.ANSWER_TIME_LIMIT_SEC;
-
-const LOCAL_PROMPTS: Array<{
-  questionText: string;
-  questionType: ClientTurn["questionType"];
-}> = [
-  {
-    questionText:
-      "How did you bring other teams along when the system behavior changed?",
-    questionType: "follow_up",
-  },
-  {
-    questionText:
-      "Describe a technical trade-off you would make differently today.",
-    questionType: "topic_shift",
-  },
-  {
-    questionText:
-      "What signal would make you confident this system is healthy in production?",
-    questionType: "follow_up",
-  },
-  {
-    questionText:
-      "Before we wrap, what part of your experience should I understand better?",
-    questionType: "closing",
-  },
-];
 
 function Notice({
   tone,
@@ -79,13 +47,19 @@ function CenteredScreen({ children }: { children: ReactNode }) {
   );
 }
 
-function PreparingScreen({ micGranted }: { micGranted: boolean }) {
+function PreparingScreen({
+  micGranted,
+  sessionStarting,
+}: {
+  micGranted: boolean;
+  sessionStarting: boolean;
+}) {
   const steps = [
     { label: "Microphone access", done: micGranted, active: !micGranted },
     {
       label: "Preparing your first question",
       done: false,
-      active: micGranted,
+      active: micGranted && sessionStarting,
     },
   ];
 
@@ -177,130 +151,41 @@ function MicDeniedScreen({
   );
 }
 
-function makeLocalDecision(nextPrompt: {
-  questionText: string;
-  questionType: ClientTurn["questionType"];
-}): Decision {
-  return {
-    nextQuestion: nextPrompt.questionText,
-    questionType: nextPrompt.questionType,
-    questionSource: "generated",
-    signals: [
-      {
-        criterionId: "be-communication",
-        dimension: "ownership",
-        polarity: "positive",
-        strength: 0.58,
-        evidence: "The answer was captured locally and is ready for review.",
-      },
-    ],
-    reasoning:
-      "This local interview flow accepted the answer and queued the next prompt.",
-    guardrail: null,
-    shouldEnd: false,
-  };
-}
-
-function mapCategoryToQuestionType(
-  category: BankQuestion["category"],
-): ClientTurn["questionType"] {
-  switch (category) {
-    case "ownership":
-      return "follow_up";
-    case "culture":
-      return "topic_shift";
-    case "red_flag":
-      return "redirect";
-    default:
-      return "topic_shift";
-  }
-}
-
-function nextPromptFor(turnCount: number, questions: BankQuestion[]) {
-  const bankQuestion = questions[turnCount];
-  if (bankQuestion) {
-    return {
-      questionText: bankQuestion.text,
-      questionType: mapCategoryToQuestionType(bankQuestion.category),
-    };
-  }
-
-  return LOCAL_PROMPTS[turnCount % LOCAL_PROMPTS.length];
-}
-
-function buildOpeningTurn(questions: BankQuestion[]): ClientTurn {
-  const openingQuestion = questions[0];
-
-  return {
-    index: 0,
-    questionText:
-      openingQuestion?.text ??
-      "Tell me about a project that best represents how you work.",
-    questionType: "opening",
-    answerTranscript: null,
-    decision: null,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildPanel(skills: JobSkill[], turns: ClientTurn[]): DecisionPanel {
-  const answeredCount = turns.filter((turn) => turn.answerTranscript !== null).length;
-  const skillStates = skills.map((skill, index) => {
-    const demonstrated = index < Math.max(0, answeredCount - 1);
-    const partial = !demonstrated && index < answeredCount;
-
-    return {
-      skillId: skill.id,
-      label: skill.label,
-      tier: skill.tier,
-      dimension: skill.dimension,
-      status: demonstrated
-        ? "demonstrated"
-        : partial
-          ? "partial"
-          : "gap",
-      strength: demonstrated ? 0.78 : partial ? 0.48 : 0,
-    } as const;
-  });
-
-  const dimensions: DecisionPanel["dimensions"] = ([
-    "technical",
-    "ownership",
-    "culture",
-  ] as const satisfies readonly Dimension[]).map((dimension) => {
-    const matches = skillStates.filter((skill) => skill.dimension === dimension);
-    const positives = matches.filter((skill) => skill.status === "demonstrated")
-      .length;
-    const partials = matches.filter((skill) => skill.status === "partial").length;
-
-    return {
-      dimension,
-      score: Math.min(100, positives * 28 + partials * 14),
-      positives,
-      redFlags: 0,
-    };
-  });
-
-  return {
-    dimensions,
-    skills: skillStates,
-    reasoning:
-      answeredCount === 0
-        ? "The interview has not collected any answer yet."
-        : "This local session is tracking skill coverage until the real interview backend is connected.",
-    lastGuardrail: null,
-    questionsAsked: turns.length,
-    followUps: turns.filter((turn) => turn.questionType === "follow_up").length,
-  };
+function StartupErrorScreen({
+  message,
+  onLeave,
+}: {
+  message: string;
+  onLeave: () => void;
+}) {
+  return (
+    <CenteredScreen>
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--danger-soft)] text-[#d83c39]">
+        <WarningCircle size={24} weight="fill" aria-hidden />
+      </div>
+      <h1 className="mt-5 text-lg font-bold text-[var(--text-primary)]">
+        The interview could not start
+      </h1>
+      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+        {message}
+      </p>
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={onLeave}
+          className="rounded-[9px] border border-[#e1e4ef] bg-white px-5 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[#fafaff]"
+        >
+          Back to roles
+        </button>
+      </div>
+    </CenteredScreen>
+  );
 }
 
 export function InterviewRoom({
   jobId,
   jobTitle,
   jobDescription,
-  interviewerName,
-  skills,
-  questions,
 }: {
   jobId: string;
   jobTitle: string;
@@ -311,23 +196,11 @@ export function InterviewRoom({
 }) {
   const router = useRouter();
   const mic = useMicPermission();
-  const voice = useVoiceCapture();
-  const [analyticsVisible, setAnalyticsVisible] = useState(false);
   const [prepared, setPrepared] = useState(false);
-  const [turns, setTurns] = useState<ClientTurn[]>(() => [
-    buildOpeningTurn(questions),
-  ]);
-  const [audioByTurn, setAudioByTurn] = useState<Record<number, VoiceRecording>>(
-    {},
-  );
-  const [captureNotice, setCaptureNotice] = useState<string | null>(null);
-  const [thinking, setThinking] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState<number>(TIME_LIMIT);
-  const thinkingTimerRef = useRef<number | null>(null);
-  const autoSubmittingRef = useRef(false);
-  const audioByTurnRef = useRef(audioByTurn);
-
-  audioByTurnRef.current = audioByTurn;
+  const [analyticsVisible, setAnalyticsVisible] = useState(false);
+  const session = useInterviewSession(jobId, {
+    enabled: mic.state === "granted" && prepared,
+  });
 
   useEffect(() => {
     if (mic.state !== "granted") {
@@ -339,156 +212,6 @@ export function InterviewRoom({
     return () => window.clearTimeout(timer);
   }, [mic.state]);
 
-  useEffect(
-    () => () => {
-      if (thinkingTimerRef.current !== null) {
-        window.clearTimeout(thinkingTimerRef.current);
-      }
-
-      Object.values(audioByTurnRef.current).forEach((recording) => {
-        URL.revokeObjectURL(recording.url);
-      });
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (mic.state !== "granted" || !prepared) return;
-
-    window.localStorage.setItem(
-      INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY,
-      JSON.stringify({
-        jobId,
-        updatedAt: new Date().toISOString(),
-        mode: "local-draft",
-      }),
-    );
-  }, [jobId, mic.state, prepared, turns]);
-
-  const activeTurn = turns.find((turn) => !turn.answerTranscript) ?? null;
-  const panel = useMemo<DecisionPanel>(() => buildPanel(skills, turns), [skills, turns]);
-
-  const startRecording = useCallback(async () => {
-    if (!activeTurn) {
-      setCaptureNotice("The sample interview has no open question right now.");
-      return;
-    }
-
-    setCaptureNotice(null);
-    setSecondsLeft(TIME_LIMIT);
-    autoSubmittingRef.current = false;
-
-    const result = await voice.start();
-    if (!result.ok) {
-      setCaptureNotice(result.message);
-    }
-  }, [activeTurn, voice]);
-
-  const appendNextQuestion = useCallback(() => {
-    setTurns((currentTurns) => {
-      if (currentTurns.some((turn) => !turn.answerTranscript)) {
-        return currentTurns;
-      }
-
-      if (currentTurns.length >= INTERVIEW_POLICY.MAX_QUESTIONS) {
-        return currentTurns;
-      }
-
-      const prompt = nextPromptFor(currentTurns.length, questions);
-      return [
-        ...currentTurns,
-        {
-          index: currentTurns.length,
-          questionText: prompt.questionText,
-          questionType: prompt.questionType,
-          answerTranscript: null,
-          decision: null,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-    });
-
-    setThinking(false);
-  }, [questions]);
-
-  const stopAndSubmit = useCallback(async () => {
-    if (!voice.isRecording || !activeTurn) return;
-
-    const turnIndex = activeTurn.index;
-    voice.stop();
-
-    const transcript = voice.getTranscript().trim();
-    const recording = await voice.takeRecording();
-
-    if (!voice.volumeOk || transcript.length < 3) {
-      if (recording) URL.revokeObjectURL(recording.url);
-      setCaptureNotice(
-        "No clear speech was detected. Please record the answer again.",
-      );
-      voice.reset();
-      setSecondsLeft(TIME_LIMIT);
-      autoSubmittingRef.current = false;
-      return;
-    }
-
-    const nextPrompt = nextPromptFor(turns.length, questions);
-    const decision = makeLocalDecision(nextPrompt);
-
-    setTurns((currentTurns) =>
-      currentTurns.map((turn) =>
-        turn.index === turnIndex
-          ? {
-              ...turn,
-              answerTranscript: transcript,
-              decision,
-            }
-          : turn,
-      ),
-    );
-
-    if (recording) {
-      setAudioByTurn((current) => {
-        const existing = current[turnIndex];
-        if (existing) URL.revokeObjectURL(existing.url);
-        return { ...current, [turnIndex]: recording };
-      });
-    }
-
-    voice.reset();
-    setSecondsLeft(TIME_LIMIT);
-    setCaptureNotice(null);
-    setThinking(true);
-
-    if (thinkingTimerRef.current !== null) {
-      window.clearTimeout(thinkingTimerRef.current);
-    }
-    thinkingTimerRef.current = window.setTimeout(
-      appendNextQuestion,
-      THINKING_DELAY_MS,
-    );
-  }, [activeTurn, appendNextQuestion, questions, turns.length, voice]);
-
-  useEffect(() => {
-    if (!voice.isRecording) return;
-
-    const interval = window.setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          window.clearInterval(interval);
-          if (!autoSubmittingRef.current) {
-            autoSubmittingRef.current = true;
-            void stopAndSubmit();
-          }
-          return 0;
-        }
-
-        return current - 1;
-      });
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [stopAndSubmit, voice.isRecording]);
-
   const leaveInterview = useCallback(() => {
     router.push("/");
   }, [router]);
@@ -497,7 +220,7 @@ export function InterviewRoom({
     return (
       <div className="app-shell">
         <InterviewHeader
-          jobTitle="Preparing interview"
+          jobTitle={jobTitle}
           analyticsVisible={analyticsVisible}
           onAnalyticsChange={setAnalyticsVisible}
         />
@@ -506,76 +229,115 @@ export function InterviewRoom({
     );
   }
 
-  if (mic.state === "checking" || !prepared) {
+  if (mic.state === "checking" || !prepared || session.phase === "starting") {
     return (
       <div className="app-shell">
         <InterviewHeader
-          jobTitle="Preparing interview"
+          jobTitle={jobTitle}
           analyticsVisible={analyticsVisible}
           onAnalyticsChange={setAnalyticsVisible}
         />
-        <PreparingScreen micGranted={mic.state === "granted"} />
+        <PreparingScreen
+          micGranted={mic.state === "granted"}
+          sessionStarting={session.phase === "starting"}
+        />
       </div>
     );
   }
 
-  const voiceNotice = voice.error && !voice.isRecording ? voice.error : null;
-  const recordingDisabled = thinking || !voice.supported || !activeTurn;
+  if (session.phase === "error") {
+    return (
+      <div className="app-shell">
+        <InterviewHeader
+          jobTitle={jobTitle}
+          analyticsVisible={analyticsVisible}
+          onAnalyticsChange={setAnalyticsVisible}
+        />
+        <StartupErrorScreen
+          message={session.error ?? "Unexpected startup error."}
+          onLeave={leaveInterview}
+        />
+      </div>
+    );
+  }
+
+  const thinking = session.phase === "streaming";
+  const thinkingText = session.streamingText || "Drafting the next prompt";
+  const recordDisabled =
+    session.phase !== "ready" ||
+    session.turns.length === 0;
 
   return (
     <div className="app-shell">
       <InterviewHeader
-        jobTitle={jobTitle}
+        jobTitle={session.jobTitle || jobTitle}
         analyticsVisible={analyticsVisible}
         onAnalyticsChange={setAnalyticsVisible}
       />
-      <main className="grid h-[calc(100dvh-var(--interview-header-height))] min-h-[620px] overflow-hidden min-[1180px]:grid-cols-[minmax(0,1fr)_var(--interview-sidebar-width)]">
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+
+      <div className="interview-layout">
+        <div className="min-h-0 min-w-0">
           <InterviewChat
-            turns={turns}
-            interviewerName={interviewerName}
-            jobTitle={jobTitle}
-            jobDescription={jobDescription}
+            turns={session.turns}
+            interviewerName={session.interviewerName}
+            jobTitle={session.jobTitle || jobTitle}
+            jobDescription={session.jobDescription || jobDescription}
             analyticsVisible={analyticsVisible}
             thinking={thinking}
-            audioByTurn={audioByTurn}
+            thinkingText={thinkingText}
+            audioByTurn={session.audioByTurn}
           />
 
-          {(!voice.supported || captureNotice || voiceNotice) && (
-            <div className="space-y-3 border-t border-[var(--border-soft)] bg-white px-5 py-3 min-[900px]:px-8">
-              {!voice.supported && (
-                <Notice tone="warning">
-                  Voice capture needs a Chromium-based browser such as Chrome
-                  or Edge.
-                </Notice>
-              )}
-              {captureNotice && <Notice tone="warning">{captureNotice}</Notice>}
-              {voiceNotice && <Notice tone="danger">{voiceNotice}</Notice>}
-            </div>
-          )}
+          <div className="space-y-3 border-t border-[var(--border-soft)] bg-white px-5 py-3 min-[900px]:px-8">
+            {session.captureNotice && (
+              <Notice tone="warning">{session.captureNotice}</Notice>
+            )}
+
+            {session.submitError && (
+              <Notice tone="danger">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span>{session.submitError}</span>
+                  {session.canRetrySubmit && (
+                    <button
+                      type="button"
+                      onClick={() => void session.retrySubmit()}
+                      className="rounded-[9px] border border-[var(--danger-border)] bg-white px-3 py-2 text-sm font-medium text-[#a6302d] transition hover:bg-[#fff7f7]"
+                    >
+                      Retry answer
+                    </button>
+                  )}
+                </div>
+              </Notice>
+            )}
+
+            {session.phase === "completed" && (
+              <Notice tone="warning">
+                This interview is complete. You can return to the roles list and
+                review the session from the home screen.
+              </Notice>
+            )}
+          </div>
 
           <RecordButton
-            isRecording={voice.isRecording}
-            volumeOk={voice.volumeOk}
-            disabled={recordingDisabled}
-            level={voice.level}
-            secondsLeft={secondsLeft}
-            timeLimit={TIME_LIMIT}
-            transcript={voice.transcript}
-            interim={voice.interim}
-            onStart={startRecording}
-            onStop={stopAndSubmit}
-          />
-        </section>
-
-        <div className="hidden min-[1180px]:block">
-          <InterviewSidebar
-            analyticsVisible={analyticsVisible}
-            panel={panel}
-            jobDescription={jobDescription}
+            isRecording={session.isRecording}
+            volumeOk={session.volumeOk}
+            disabled={recordDisabled}
+            level={session.level}
+            secondsLeft={session.secondsLeft}
+            timeLimit={session.timeLimit}
+            transcript={session.liveTranscript}
+            interim={session.interim}
+            onStart={session.startRecording}
+            onStop={session.stopAndSubmit}
           />
         </div>
-      </main>
+
+        <InterviewSidebar
+          analyticsVisible={analyticsVisible}
+          panel={session.panel}
+          jobDescription={session.jobDescription || jobDescription}
+        />
+      </div>
     </div>
   );
 }
