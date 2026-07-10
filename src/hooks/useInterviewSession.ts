@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { DecisionPanel } from "@/domain/interview";
+import type { DecisionPanel, FinalEvaluation } from "@/domain/interview";
 import { INTERVIEW_POLICY } from "@/domain/interviewPolicy";
 import { INTERVIEW_UI } from "@/config/interviewUi";
 import type { ClientSession, ClientTurn } from "@/lib/serializers";
@@ -28,6 +28,7 @@ interface State {
   turns: ClientTurn[];
   streamingText: string;
   panel: DecisionPanel | null;
+  finalEvaluation: FinalEvaluation | null;
   secondsLeft: number;
   captureNotice: string | null;
   submitError: string | null;
@@ -56,6 +57,7 @@ const initialState: State = {
   turns: [],
   streamingText: "",
   panel: null,
+  finalEvaluation: null,
   secondsLeft: TIME_LIMIT,
   captureNotice: null,
   submitError: null,
@@ -82,6 +84,7 @@ function reducer(state: State, action: Action): State {
         turnIndex: pendingTurn?.index ?? 0,
         turns: action.session.turns,
         panel: action.session.panel,
+        finalEvaluation: action.session.finalEvaluation,
         error: null,
       };
     }
@@ -139,6 +142,7 @@ function reducer(state: State, action: Action): State {
           phase: "completed",
           panel: action.payload.panel,
           turns: answeredTurns,
+          finalEvaluation: action.payload.finalEvaluation,
           pendingTranscript: null,
           streamingText: "",
         };
@@ -252,6 +256,7 @@ export interface InterviewSession {
   turns: ClientTurn[];
   streamingText: string;
   panel: DecisionPanel | null;
+  finalEvaluation: FinalEvaluation | null;
   sessionId: string | null;
   secondsLeft: number;
   timeLimit: number;
@@ -467,6 +472,7 @@ export function useInterviewSession(
     turns: state.turns,
     streamingText: state.streamingText,
     panel: state.panel,
+    finalEvaluation: state.finalEvaluation,
     sessionId: state.sessionId,
     secondsLeft: state.secondsLeft,
     timeLimit: TIME_LIMIT,

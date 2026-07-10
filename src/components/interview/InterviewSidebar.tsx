@@ -91,7 +91,7 @@ export function InterviewSidebar({
               <StatusRow
                 icon={ShieldCheck}
                 label="Transparent scoring"
-                value="Analytics shows the reasoning panel"
+                value="Toggle Analytics to watch the interview reasoning live"
               />
             </div>
           </SidebarCard>
@@ -100,8 +100,8 @@ export function InterviewSidebar({
             <div className="mt-4 space-y-4">
               {[
                 ["Read the question", "Take a moment before recording."],
-                ["Tap the microphone", "Speak naturally in one answer."],
-                ["Wait for follow-up", "The next prompt adapts to the answer."],
+                ["Tap the microphone", "Speak naturally; tap again to submit."],
+                ["Wait for follow-up", "The interviewer types the next prompt live."],
               ].map(([title, copy], index) => (
                 <div key={title} className="grid grid-cols-[28px_1fr] gap-3">
                   <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--primary-soft)] text-xs font-bold text-[var(--primary)]">
