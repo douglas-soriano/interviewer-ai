@@ -136,11 +136,11 @@ function RecentSessions({ interviews }: { interviews: InterviewHistoryItem[] }) 
         Past interviews
       </h2>
       <div className="mt-3 overflow-hidden rounded-[13px] border border-[var(--border)] bg-white shadow-[var(--shadow-card)]">
-        {interviews.map((item) => (
+        {interviews.slice(0, 5).map((item) => (
           <Link
             key={item.id}
             href={`/results/${item.id}`}
-            className="grid gap-3 border-b border-[var(--border-soft)] px-5 py-4 transition last:border-b-0 hover:bg-[#fafaff] sm:grid-cols-[1fr_auto_auto] sm:items-center"
+            className="grid gap-3 border-b border-[var(--border-soft)] px-5 py-4 transition last:border-b-0 hover:bg-[#fafaff] sm:grid-cols-[1fr_auto_auto_auto] sm:items-center"
           >
             <div className="min-w-0">
               <p className="m-0 truncate text-[13px] font-semibold leading-5 text-[#22284f]">
@@ -151,14 +151,21 @@ function RecentSessions({ interviews }: { interviews: InterviewHistoryItem[] }) 
                 {item.answeredQuestions === 1 ? "answer" : "answers"}
               </p>
             </div>
+            <span
+              className={`inline-flex h-[26px] w-fit items-center rounded-[6px] px-2.5 text-[11px] font-medium ${
+                item.status === "completed"
+                  ? "bg-[var(--success-soft)] text-[#12a86a]"
+                  : "bg-[var(--primary-soft)] text-[#615cf2]"
+              }`}
+            >
+              {item.status === "completed" ? "Completed" : "In progress"}
+            </span>
             {item.status === "completed" && item.overallScore !== null ? (
-              <span className="inline-flex h-[26px] w-fit items-center rounded-[6px] bg-[var(--success-soft)] px-2.5 text-[11px] font-semibold text-[#12a86a]">
+              <span className="inline-flex h-[26px] w-fit items-center rounded-[6px] bg-[#eef8f3] px-2.5 text-[11px] font-semibold text-[#10945d]">
                 Score {item.overallScore}
               </span>
             ) : (
-              <span className="inline-flex h-[26px] w-fit items-center rounded-[6px] bg-[var(--primary-soft)] px-2.5 text-[11px] font-medium text-[#615cf2]">
-                {item.status === "completed" ? "Completed" : "In progress"}
-              </span>
+              <span className="hidden sm:block" aria-hidden />
             )}
             <ArrowRight size={15} className="hidden text-[#9aa0c2] sm:block" aria-hidden />
           </Link>
