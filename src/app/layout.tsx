@@ -3,7 +3,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Interviewer AI",
-  description: "Voice-led interview workspace with auditable evaluation flows.",
+  description:
+    "AI-led voice interviews with structured evaluation and clear candidate feedback.",
+  icons: {
+    icon: "/icon",
+  },
 };
 
 export default function RootLayout({
@@ -13,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="min-h-[100dvh] antialiased">{children}</body>
     </html>
   );
 }
