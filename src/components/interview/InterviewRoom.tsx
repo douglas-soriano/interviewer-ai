@@ -10,20 +10,18 @@ import {
   MicrophoneSlash,
 } from "@phosphor-icons/react";
 import type { Decision, DecisionPanel } from "@/domain/interview";
+import type { BankQuestion, Dimension, JobSkill } from "@/domain/interview";
 import { INTERVIEW_POLICY } from "@/domain/interviewPolicy";
+import { INTERVIEW_UI } from "@/config/interviewUi";
 import { useMicPermission } from "@/hooks/useMicPermission";
 import { useVoiceCapture } from "@/hooks/useVoiceCapture";
 import type { VoiceRecording } from "@/hooks/useVoiceCapture";
 import type { ClientTurn } from "@/lib/serializers";
-import { mockPanel, mockTurns } from "@/mock/interviewData";
 import { InterviewChat } from "./InterviewChat";
 import { InterviewHeader } from "./InterviewHeader";
 import { InterviewSidebar } from "./InterviewSidebar";
 import { RecordButton } from "./RecordButton";
 
-const jobTitle = "Senior Backend Engineer";
-const jobDescription =
-  "Own APIs, data modeling, reliability work, and the trade-offs behind production systems.";
 const PREPARING_DELAY_MS = 650;
 const THINKING_DELAY_MS = 950;
 const TIME_LIMIT = INTERVIEW_POLICY.ANSWER_TIME_LIMIT_SEC;
@@ -179,7 +177,10 @@ function MicDeniedScreen({
   );
 }
 
-function makeLocalDecision(nextPrompt: (typeof LOCAL_PROMPTS)[number]): Decision {
+function makeLocalDecision(nextPrompt: {
+  questionText: string;
+  questionType: ClientTurn["questionType"];
+}): Decision {
   return {
     nextQuestion: nextPrompt.questionText,
     questionType: nextPrompt.questionType,
@@ -200,17 +201,122 @@ function makeLocalDecision(nextPrompt: (typeof LOCAL_PROMPTS)[number]): Decision
   };
 }
 
-function nextPromptFor(turnCount: number) {
+function mapCategoryToQuestionType(
+  category: BankQuestion["category"],
+): ClientTurn["questionType"] {
+  switch (category) {
+    case "ownership":
+      return "follow_up";
+    case "culture":
+      return "topic_shift";
+    case "red_flag":
+      return "redirect";
+    default:
+      return "topic_shift";
+  }
+}
+
+function nextPromptFor(turnCount: number, questions: BankQuestion[]) {
+  const bankQuestion = questions[turnCount];
+  if (bankQuestion) {
+    return {
+      questionText: bankQuestion.text,
+      questionType: mapCategoryToQuestionType(bankQuestion.category),
+    };
+  }
+
   return LOCAL_PROMPTS[turnCount % LOCAL_PROMPTS.length];
 }
 
-export function InterviewRoom() {
+function buildOpeningTurn(questions: BankQuestion[]): ClientTurn {
+  const openingQuestion = questions[0];
+
+  return {
+    index: 0,
+    questionText:
+      openingQuestion?.text ??
+      "Tell me about a project that best represents how you work.",
+    questionType: "opening",
+    answerTranscript: null,
+    decision: null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildPanel(skills: JobSkill[], turns: ClientTurn[]): DecisionPanel {
+  const answeredCount = turns.filter((turn) => turn.answerTranscript !== null).length;
+  const skillStates = skills.map((skill, index) => {
+    const demonstrated = index < Math.max(0, answeredCount - 1);
+    const partial = !demonstrated && index < answeredCount;
+
+    return {
+      skillId: skill.id,
+      label: skill.label,
+      tier: skill.tier,
+      dimension: skill.dimension,
+      status: demonstrated
+        ? "demonstrated"
+        : partial
+          ? "partial"
+          : "gap",
+      strength: demonstrated ? 0.78 : partial ? 0.48 : 0,
+    } as const;
+  });
+
+  const dimensions: DecisionPanel["dimensions"] = ([
+    "technical",
+    "ownership",
+    "culture",
+  ] as const satisfies readonly Dimension[]).map((dimension) => {
+    const matches = skillStates.filter((skill) => skill.dimension === dimension);
+    const positives = matches.filter((skill) => skill.status === "demonstrated")
+      .length;
+    const partials = matches.filter((skill) => skill.status === "partial").length;
+
+    return {
+      dimension,
+      score: Math.min(100, positives * 28 + partials * 14),
+      positives,
+      redFlags: 0,
+    };
+  });
+
+  return {
+    dimensions,
+    skills: skillStates,
+    reasoning:
+      answeredCount === 0
+        ? "The interview has not collected any answer yet."
+        : "This local session is tracking skill coverage until the real interview backend is connected.",
+    lastGuardrail: null,
+    questionsAsked: turns.length,
+    followUps: turns.filter((turn) => turn.questionType === "follow_up").length,
+  };
+}
+
+export function InterviewRoom({
+  jobId,
+  jobTitle,
+  jobDescription,
+  interviewerName,
+  skills,
+  questions,
+}: {
+  jobId: string;
+  jobTitle: string;
+  jobDescription: string;
+  interviewerName: string;
+  skills: JobSkill[];
+  questions: BankQuestion[];
+}) {
   const router = useRouter();
   const mic = useMicPermission();
   const voice = useVoiceCapture();
   const [analyticsVisible, setAnalyticsVisible] = useState(false);
   const [prepared, setPrepared] = useState(false);
-  const [turns, setTurns] = useState<ClientTurn[]>(() => mockTurns);
+  const [turns, setTurns] = useState<ClientTurn[]>(() => [
+    buildOpeningTurn(questions),
+  ]);
   const [audioByTurn, setAudioByTurn] = useState<Record<number, VoiceRecording>>(
     {},
   );
@@ -246,17 +352,21 @@ export function InterviewRoom() {
     [],
   );
 
-  const activeTurn = turns.find((turn) => !turn.answerTranscript) ?? null;
+  useEffect(() => {
+    if (mic.state !== "granted" || !prepared) return;
 
-  const panel = useMemo<DecisionPanel>(
-    () => ({
-      ...mockPanel,
-      questionsAsked: turns.length,
-      followUps: turns.filter((turn) => turn.questionType === "follow_up")
-        .length,
-    }),
-    [turns],
-  );
+    window.localStorage.setItem(
+      INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        jobId,
+        updatedAt: new Date().toISOString(),
+        mode: "local-draft",
+      }),
+    );
+  }, [jobId, mic.state, prepared, turns]);
+
+  const activeTurn = turns.find((turn) => !turn.answerTranscript) ?? null;
+  const panel = useMemo<DecisionPanel>(() => buildPanel(skills, turns), [skills, turns]);
 
   const startRecording = useCallback(async () => {
     if (!activeTurn) {
@@ -284,7 +394,7 @@ export function InterviewRoom() {
         return currentTurns;
       }
 
-      const prompt = nextPromptFor(currentTurns.length);
+      const prompt = nextPromptFor(currentTurns.length, questions);
       return [
         ...currentTurns,
         {
@@ -299,7 +409,7 @@ export function InterviewRoom() {
     });
 
     setThinking(false);
-  }, []);
+  }, [questions]);
 
   const stopAndSubmit = useCallback(async () => {
     if (!voice.isRecording || !activeTurn) return;
@@ -321,7 +431,7 @@ export function InterviewRoom() {
       return;
     }
 
-    const nextPrompt = nextPromptFor(turns.length);
+    const nextPrompt = nextPromptFor(turns.length, questions);
     const decision = makeLocalDecision(nextPrompt);
 
     setTurns((currentTurns) =>
@@ -356,7 +466,7 @@ export function InterviewRoom() {
       appendNextQuestion,
       THINKING_DELAY_MS,
     );
-  }, [activeTurn, appendNextQuestion, turns.length, voice]);
+  }, [activeTurn, appendNextQuestion, questions, turns.length, voice]);
 
   useEffect(() => {
     if (!voice.isRecording) return;
@@ -423,7 +533,7 @@ export function InterviewRoom() {
         <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <InterviewChat
             turns={turns}
-            interviewerName="Dana"
+            interviewerName={interviewerName}
             jobTitle={jobTitle}
             jobDescription={jobDescription}
             analyticsVisible={analyticsVisible}

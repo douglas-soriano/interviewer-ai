@@ -1,6 +1,14 @@
 import { HomeDashboard } from "@/components/home/HomeDashboard";
-import { mockHistory, mockJobs } from "@/mock/interviewData";
+import { listSessionHistory } from "@/services/interview/listSessionHistory";
+import { listJobs } from "@/services/job/listJobs";
 
-export default function Home() {
-  return <HomeDashboard jobs={mockJobs} interviews={mockHistory} />;
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const [jobs, interviews] = await Promise.all([
+    listJobs(),
+    listSessionHistory(),
+  ]);
+
+  return <HomeDashboard jobs={jobs} interviews={interviews} />;
 }
