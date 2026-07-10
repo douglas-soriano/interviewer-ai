@@ -1,8 +1,12 @@
 # Interviewer AI
 
+<img src="https://github.com/user-attachments/assets/b59f580d-08b7-4adc-8e9b-450e0bd6d1e3" />
+
 ## 1. Overview
 
 Interviewer AI is a voice-based interview app built to help candidates practice technical interviews.
+
+<img alt="InterviewerAI_Screen_01" src="https://github.com/user-attachments/assets/cd49a1a4-bccb-412b-9b7d-1ad1733e837b" />
 
 The interviewer listens to each answer, reviews its content, and creates the next question based on what the candidate said. At the end of the session, the app shows the full transcript, the interviewer's reasoning, and a final score.
 
@@ -390,49 +394,3 @@ The final score is calculated from the saved decisions, which makes the result:
 The next question is returned through Server-Sent Events.
 
 This allows the interface to show the question while it is being generated instead of waiting for the full response.
-
-### Deployment
-
-The recommended hosted setup is:
-
-* Next.js application on Vercel
-* Managed PostgreSQL database
-* Gemini or OpenRouter as the LLM provider
-
-Required hosted environment variables:
-
-```env
-DATABASE_URL=
-LLM_PROVIDER=
-GEMINI_API_KEY=
-```
-
-or:
-
-```env
-DATABASE_URL=
-LLM_PROVIDER=
-OPENROUTER_API_KEY=
-```
-
-When using OpenRouter, set the hosted application URL:
-
-```env
-OPENROUTER_APP_URL=
-```
-
-### Smoke test
-
-After starting the application, check that:
-
-* The home page lists public jobs
-* A job can be created and edited in settings
-* An interview session can be started
-* Microphone permission errors are clearly shown
-* Unsupported browsers are clearly handled
-* An answer can be recorded and submitted
-* The next question is streamed to the interview room
-* A completed interview appears in the session history
-* The results page shows the transcript
-* A completed session shows the final evaluation
-* An active session shows the transcript without a final evaluation
