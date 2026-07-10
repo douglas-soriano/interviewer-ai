@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useMemo, useRef } from "react";
 import { Sparkle, Target } from "@phosphor-icons/react";
 import type { Decision, Signal } from "@/domain/interview";
 import type { VoiceRecording } from "@/hooks/useVoiceCapture";
@@ -51,17 +52,33 @@ function SignalList({ signals }: { signals: Signal[] }) {
         Signals
       </p>
       <ul className="space-y-2">
-        {signals.map((signal, index) => (
-          <li
-            key={`${signal.criterionId}-${index}`}
-            className="rounded-[8px] border border-[#e4e6f2] bg-white px-3 py-2 text-xs leading-5 text-[var(--text-secondary)]"
-          >
-            <span className="font-semibold text-[#138b58]">Matched</span>
-            <span className="text-[var(--text-faint)]">: </span>
-            <span>{signal.criterionId}</span>
-            <p className="mt-1 text-[var(--text-muted)]">{signal.evidence}</p>
-          </li>
-        ))}
+        {signals.map((signal, index) => {
+          const isRedFlag = signal.polarity === "red_flag";
+
+          return (
+            <li
+              key={`${signal.criterionId}-${index}`}
+              className="rounded-[8px] border border-[#e4e6f2] bg-white px-3 py-2 text-xs leading-5 text-[var(--text-secondary)]"
+            >
+              <span
+                className={
+                  isRedFlag
+                    ? "font-semibold text-[#b63835]"
+                    : "font-semibold text-[#138b58]"
+                }
+              >
+                {isRedFlag ? "Red flag" : "Matched"}
+              </span>
+              <span className="text-[var(--text-faint)]">: </span>
+              <span>{signal.criterionId}</span>
+              {signal.evidence && (
+                <p className="mt-1 text-[var(--text-muted)]">
+                  {signal.evidence}
+                </p>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -72,12 +89,14 @@ function AssistantBubble({
   questionNumber,
   turn,
   rationale,
+  fromBank,
   analyticsVisible,
 }: {
   interviewerName: string;
   questionNumber: number;
   turn: ClientTurn;
   rationale: string | null;
+  fromBank: boolean;
   analyticsVisible: boolean;
 }) {
   return (
@@ -86,9 +105,14 @@ function AssistantBubble({
       <div className="max-w-[760px] space-y-2">
         {analyticsVisible && rationale && (
           <div className="rounded-[12px] border border-[#dfe1ff] bg-[#f8f7ff] px-4 py-3 text-sm text-[#363b75]">
-            <p className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#5c5feb]">
+            <p className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#5c5feb]">
               <Target size={14} aria-hidden />
               Why this question
+              {fromBank && (
+                <span className="rounded-[5px] border border-[#d3d4fb] bg-white px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-wide text-[#5c5feb]">
+                  From the question bank
+                </span>
+              )}
             </p>
             <p className="leading-6">{rationale}</p>
           </div>
@@ -153,18 +177,27 @@ function CandidateBubble({
 }
 
 function ThinkingBubble({ text }: { text: string }) {
+  const typing = text.length > 0;
+
   return (
     <article className="flex items-start gap-3" aria-live="polite">
       <AiAvatar />
       <div className="max-w-[760px] rounded-[18px] rounded-tl-[5px] border border-[#dedffa] bg-white px-[18px] py-[14px] text-[var(--text-primary)] shadow-[0_5px_18px_rgb(28_32_86/0.045)]">
-        <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
-          <span>{text}</span>
-          <span className="flex gap-1" aria-hidden>
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] [animation-delay:-160ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] [animation-delay:-80ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5]" />
-          </span>
-        </div>
+        {typing ? (
+          <p className="whitespace-pre-wrap text-[15px] leading-7">
+            {text}
+            <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-[var(--primary)] align-middle motion-reduce:animate-none" />
+          </p>
+        ) : (
+          <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
+            <span>Preparing a follow-up question.</span>
+            <span className="flex gap-1" aria-hidden>
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] motion-reduce:animate-none [animation-delay:-160ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] motion-reduce:animate-none [animation-delay:-80ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8c8ff5] motion-reduce:animate-none" />
+            </span>
+          </div>
+        )}
       </div>
     </article>
   );
@@ -177,7 +210,7 @@ export function InterviewChat({
   jobDescription,
   analyticsVisible,
   thinking = false,
-  thinkingText = "Drafting the next prompt",
+  thinkingText = "",
   audioByTurn = {},
 }: {
   turns: ClientTurn[];
@@ -189,24 +222,47 @@ export function InterviewChat({
   thinkingText?: string;
   audioByTurn?: Record<number, VoiceRecording>;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const orderedTurns = useMemo(
+    () => [...turns].sort((left, right) => left.index - right.index),
+    [turns],
+  );
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [orderedTurns.length, thinkingText]);
+
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-[#fdfdff]">
       <header className="border-b border-[var(--border-soft)] bg-white px-5 py-4 min-[900px]:px-8">
         <p className="text-sm font-bold text-[var(--text-primary)]">{jobTitle}</p>
-        <p className="mt-1 line-clamp-2 max-w-[760px] text-sm leading-6 text-[var(--text-secondary)]">
-          {jobDescription}
-        </p>
+        {jobDescription && (
+          <p className="mt-1 line-clamp-2 max-w-[760px] text-sm leading-6 text-[var(--text-secondary)]">
+            {jobDescription}
+          </p>
+        )}
       </header>
 
       <div
+        ref={listRef}
         className="soft-scrollbar flex-1 space-y-6 overflow-y-auto px-5 py-6 min-[900px]:px-8"
         role="log"
         aria-live="polite"
         aria-label="Interview conversation"
       >
-        {turns.map((turn) => {
-          const previousTurn = turns.find((item) => item.index === turn.index - 1);
+        {orderedTurns.map((turn) => {
+          const previousTurn = orderedTurns.find(
+            (item) => item.index === turn.index - 1,
+          );
           const rationale = previousTurn?.decision?.reasoning ?? null;
+          const fromBank = previousTurn?.decision?.questionSource === "bank";
 
           return (
             <div key={turn.index} className="space-y-4">
@@ -215,6 +271,7 @@ export function InterviewChat({
                 questionNumber={turn.index + 1}
                 turn={turn}
                 rationale={rationale}
+                fromBank={fromBank}
                 analyticsVisible={analyticsVisible}
               />
               {turn.answerTranscript && (

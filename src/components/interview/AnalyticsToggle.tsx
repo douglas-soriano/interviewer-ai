@@ -12,6 +12,7 @@ export function AnalyticsToggle({
       type="button"
       role="switch"
       aria-checked={enabled}
+      aria-label="Toggle live analytics"
       onClick={() => onChange(!enabled)}
       className="inline-flex h-10 items-center gap-3 rounded-[10px] border border-[#dedffa] bg-white px-3 text-[13px] font-medium text-[var(--text-primary)] transition hover:border-[#cfd1fb] hover:bg-[#f8f7ff]"
     >

@@ -5,6 +5,7 @@ import type { DecisionPanel, FinalEvaluation } from "@/domain/interview";
 import { INTERVIEW_POLICY } from "@/domain/interviewPolicy";
 import { INTERVIEW_UI } from "@/config/interviewUi";
 import type { ClientSession, ClientTurn } from "@/lib/serializers";
+import { getUiErrorMessage } from "@/lib/uiError";
 import { useQuestionStream, type StreamDonePayload } from "./useQuestionStream";
 import { useVoiceCapture, type VoiceRecording } from "./useVoiceCapture";
 
@@ -184,65 +185,21 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-function readActiveSession(jobId: string): string | null {
-  try {
-    const raw = window.localStorage.getItem(
-      INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY,
-    );
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as { jobId?: string; sessionId?: string };
-    if (parsed.jobId !== jobId || typeof parsed.sessionId !== "string") {
-      return null;
-    }
-
-    return parsed.sessionId;
-  } catch {
-    return null;
-  }
-}
-
-function persistActiveSession(jobId: string, sessionId: string): void {
-  window.localStorage.setItem(
-    INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY,
-    JSON.stringify({
-      jobId,
-      sessionId,
-      updatedAt: new Date().toISOString(),
-    }),
-  );
-}
-
-function clearActiveSession(sessionId: string | null): void {
-  try {
-    const raw = window.localStorage.getItem(
-      INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY,
-    );
-    if (!raw) {
-      return;
-    }
-
-    const parsed = JSON.parse(raw) as { sessionId?: string };
-    if (!sessionId || parsed.sessionId === sessionId) {
-      window.localStorage.removeItem(INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY);
-    }
-  } catch {
-    window.localStorage.removeItem(INTERVIEW_UI.ACTIVE_SESSION_STORAGE_KEY);
-  }
-}
-
-async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(
+  input: RequestInfo,
+  context: "start" | "submit",
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(input, init);
   const json = (await response.json()) as {
     success: boolean;
     data?: T;
     message?: string;
+    code?: string;
   };
 
   if (!json.success || !json.data) {
-    throw new Error(json.message ?? "Unexpected request failure.");
+    throw new Error(getUiErrorMessage(json, context));
   }
 
   return json.data;
@@ -274,6 +231,7 @@ export interface InterviewSession {
   startRecording: () => Promise<void>;
   stopAndSubmit: () => Promise<void>;
   retrySubmit: () => Promise<void>;
+  endInterview: () => Promise<string | null>;
 }
 
 export function useInterviewSession(
@@ -299,30 +257,17 @@ export function useInterviewSession(
 
     const start = async () => {
       try {
-        const activeSessionId = readActiveSession(jobId);
-
-        if (activeSessionId) {
-          const resumed = await fetchJson<ClientSession>(
-            `/api/sessions/${activeSessionId}`,
-          );
-
-          if (!cancelled && resumed.status === "in_progress") {
-            persistActiveSession(jobId, resumed.id);
-            dispatch({ type: "START_SUCCESS", session: resumed });
-            return;
-          }
-
-          clearActiveSession(activeSessionId);
-        }
-
-        const created = await fetchJson<ClientSession>("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId }),
-        });
+        const created = await fetchJson<ClientSession>(
+          "/api/sessions",
+          "start",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ jobId }),
+          },
+        );
 
         if (!cancelled) {
-          persistActiveSession(jobId, created.id);
           dispatch({ type: "START_SUCCESS", session: created });
         }
       } catch (error) {
@@ -344,16 +289,6 @@ export function useInterviewSession(
       cancelled = true;
     };
   }, [enabled, jobId]);
-
-  useEffect(() => {
-    if (state.sessionId && state.phase !== "completed" && state.phase !== "error") {
-      persistActiveSession(jobId, state.sessionId);
-    }
-
-    if (state.phase === "completed" || state.phase === "error") {
-      clearActiveSession(state.sessionId);
-    }
-  }, [jobId, state.phase, state.sessionId]);
 
   const submit = useCallback(
     async (transcript: string) => {
@@ -455,6 +390,53 @@ export function useInterviewSession(
     }
   }, [state.phase, state.secondsLeft]);
 
+  const active =
+    state.sessionId !== null &&
+    state.phase !== "completed" &&
+    state.phase !== "error";
+
+  useEffect(() => {
+    if (!active || !state.sessionId) {
+      return;
+    }
+
+    const sessionId = state.sessionId;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const endOnPageHide = () => {
+      navigator.sendBeacon(`/api/sessions/${sessionId}/end`);
+    };
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    window.addEventListener("pagehide", endOnPageHide);
+
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      window.removeEventListener("pagehide", endOnPageHide);
+    };
+  }, [active, state.sessionId]);
+
+  const endInterview = useCallback(async (): Promise<string | null> => {
+    if (!state.sessionId) {
+      return null;
+    }
+
+    voice.stop();
+
+    try {
+      await fetch(`/api/sessions/${state.sessionId}/end`, {
+        method: "POST",
+        keepalive: true,
+      });
+    } catch {
+      // Starting the next interview also closes any session left open.
+    }
+
+    return state.sessionId;
+  }, [state.sessionId, voice]);
+
   useEffect(
     () => () => {
       Object.values(audioByTurn).forEach((recording) => {
@@ -490,5 +472,6 @@ export function useInterviewSession(
     startRecording,
     stopAndSubmit,
     retrySubmit,
+    endInterview,
   };
 }

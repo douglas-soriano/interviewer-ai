@@ -28,6 +28,13 @@ export function RecordButton({
   onStop: () => void | Promise<void>;
 }) {
   const liveText = `${transcript} ${interim}`.trim();
+  const stateLabel = isRecording
+    ? volumeOk
+      ? "Recording now"
+      : "Recording, waiting for speech"
+    : disabled
+      ? "Waiting for next question"
+      : "Ready to answer";
 
   const toggle = () => {
     if (isRecording) {
@@ -42,13 +49,29 @@ export function RecordButton({
 
   return (
     <section className="border-t border-[var(--border-soft)] bg-white px-5 py-4 min-[900px]:px-8">
-      <div className="mx-auto flex max-w-[920px] items-center gap-4 rounded-[24px] border border-[#e0e2ef] bg-[#fbfbff] p-3 shadow-[0_8px_28px_rgb(26_30_86/0.07)]">
+      <div className="mx-auto flex max-w-[920px] items-center gap-3 rounded-[24px] border border-[#e0e2ef] bg-[#fbfbff] p-3 shadow-[0_8px_28px_rgb(26_30_86/0.07)] min-[560px]:gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
-            <WaveformVisualizer level={level} active={isRecording} />
+            <div className="hidden min-[560px]:block">
+              <WaveformVisualizer level={level} active={isRecording} />
+            </div>
             <div className="min-w-0 flex-1">
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    isRecording
+                      ? "bg-[var(--danger-soft)] text-[#b63835]"
+                      : disabled
+                        ? "bg-[#eef0f6] text-[var(--text-muted)]"
+                        : "bg-[var(--success-soft)] text-[#158b59]"
+                  }`}
+                >
+                  {stateLabel}
+                </span>
+              </div>
               <div
                 aria-live="polite"
+                role="status"
                 className="relative flex h-6 items-center overflow-hidden"
               >
                 {isRecording && liveText && (
@@ -66,8 +89,9 @@ export function RecordButton({
                 </p>
               </div>
               <div
-                className="mt-2 flex items-center gap-2 text-xs"
+                className="mt-2 hidden items-center gap-2 text-xs sm:flex"
                 aria-live="polite"
+                role="status"
               >
                 <span
                   className={`h-2 w-2 rounded-full ${
@@ -111,6 +135,7 @@ export function RecordButton({
           aria-label={
             isRecording ? "Stop and submit answer" : "Start recording answer"
           }
+          aria-describedby="recording-state-text"
           className={`relative grid h-[64px] w-[64px] shrink-0 place-items-center rounded-full text-white shadow-[var(--shadow-mic)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 ${
             isRecording ? "bg-[#f04b48]" : "bg-[image:var(--gradient-mic)]"
           }`}
@@ -118,7 +143,7 @@ export function RecordButton({
           {isRecording && (
             <span
               aria-hidden
-              className="absolute inset-[-7px] animate-ping rounded-full bg-[#f04b48]/20"
+              className="absolute inset-[-7px] animate-ping rounded-full bg-[#f04b48]/20 motion-reduce:animate-none"
             />
           )}
           {isRecording ? (
@@ -128,6 +153,9 @@ export function RecordButton({
           )}
         </button>
       </div>
+      <p id="recording-state-text" className="sr-only" aria-live="polite">
+        {stateLabel}
+      </p>
     </section>
   );
 }

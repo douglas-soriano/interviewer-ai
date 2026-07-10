@@ -19,6 +19,7 @@ import { InterviewSidebar } from "./InterviewSidebar";
 import { RecordButton } from "./RecordButton";
 
 const PREPARING_DELAY_MS = 650;
+const MIC_DENIED_REDIRECT_SEC = 8;
 
 function Notice({
   tone,
@@ -33,7 +34,11 @@ function Notice({
       : "border-[#ffe0bd] bg-[var(--warning-soft)] text-[#9d570d]";
 
   return (
-    <div className={`rounded-[12px] border px-4 py-3 text-sm leading-6 ${className}`}>
+    <div
+      className={`rounded-[12px] border px-4 py-3 text-sm leading-6 ${className}`}
+      role={tone === "danger" ? "alert" : "status"}
+      aria-live={tone === "danger" ? "assertive" : "polite"}
+    >
       {children}
     </div>
   );
@@ -119,6 +124,23 @@ function MicDeniedScreen({
   onRetry: () => void;
   onLeave: () => void;
 }) {
+  const [secondsLeft, setSecondsLeft] = useState(MIC_DENIED_REDIRECT_SEC);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(
+      () => setSecondsLeft((seconds) => seconds - 1),
+      1000,
+    );
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) {
+      onLeave();
+    }
+  }, [onLeave, secondsLeft]);
+
   return (
     <CenteredScreen>
       <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--danger-soft)] text-[#d83c39]">
@@ -139,6 +161,35 @@ function MicDeniedScreen({
         >
           Allow microphone
         </button>
+        <button
+          type="button"
+          onClick={onLeave}
+          className="rounded-[9px] border border-[#e1e4ef] bg-white px-5 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[#fafaff]"
+        >
+          Back to roles
+        </button>
+      </div>
+      <p className="mt-4 text-xs text-[var(--text-muted)]" aria-live="polite">
+        Returning to the role list in {Math.max(0, secondsLeft)}s.
+      </p>
+    </CenteredScreen>
+  );
+}
+
+function UnsupportedBrowserScreen({ onLeave }: { onLeave: () => void }) {
+  return (
+    <CenteredScreen>
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--warning-soft)] text-[#9d570d]">
+        <WarningCircle size={24} weight="fill" aria-hidden />
+      </div>
+      <h1 className="mt-5 text-lg font-bold text-[var(--text-primary)]">
+        This browser cannot run the voice interview
+      </h1>
+      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+        Live voice capture needs microphone access and in-browser speech
+        recognition. Use a recent Chromium-based browser and try again.
+      </p>
+      <div className="mt-6 flex justify-center">
         <button
           type="button"
           onClick={onLeave}
@@ -212,19 +263,64 @@ export function InterviewRoom({
     return () => window.clearTimeout(timer);
   }, [mic.state]);
 
-  const leaveInterview = useCallback(() => {
-    router.push("/");
-  }, [router]);
+  useEffect(() => {
+    if (session.phase === "completed" && session.sessionId) {
+      router.push(`/results/${session.sessionId}`);
+    }
+  }, [router, session.phase, session.sessionId]);
+
+  const leaveInterview = useCallback(async () => {
+    const active =
+      session.sessionId &&
+      session.phase !== "completed" &&
+      session.phase !== "error";
+
+    if (!active) {
+      router.push("/");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Leave the interview? It will end now and create a result from the answers submitted so far.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const sessionId = await session.endInterview();
+    router.push(sessionId ? `/results/${sessionId}` : "/");
+  }, [router, session]);
 
   if (mic.state === "denied") {
     return (
       <div className="app-shell">
         <InterviewHeader
           jobTitle={jobTitle}
+          phase={session.phase}
           analyticsVisible={analyticsVisible}
           onAnalyticsChange={setAnalyticsVisible}
+          onLeave={() => void leaveInterview()}
         />
-        <MicDeniedScreen onRetry={mic.retry} onLeave={leaveInterview} />
+        <MicDeniedScreen
+          onRetry={mic.retry}
+          onLeave={() => void leaveInterview()}
+        />
+      </div>
+    );
+  }
+
+  if (mic.state === "unsupported" || !session.voiceSupported) {
+    return (
+      <div className="app-shell">
+        <InterviewHeader
+          jobTitle={jobTitle}
+          phase={session.phase}
+          analyticsVisible={analyticsVisible}
+          onAnalyticsChange={setAnalyticsVisible}
+          onLeave={() => void leaveInterview()}
+        />
+        <UnsupportedBrowserScreen onLeave={() => void leaveInterview()} />
       </div>
     );
   }
@@ -234,8 +330,10 @@ export function InterviewRoom({
       <div className="app-shell">
         <InterviewHeader
           jobTitle={jobTitle}
+          phase={session.phase}
           analyticsVisible={analyticsVisible}
           onAnalyticsChange={setAnalyticsVisible}
+          onLeave={() => void leaveInterview()}
         />
         <PreparingScreen
           micGranted={mic.state === "granted"}
@@ -250,19 +348,21 @@ export function InterviewRoom({
       <div className="app-shell">
         <InterviewHeader
           jobTitle={jobTitle}
+          phase={session.phase}
           analyticsVisible={analyticsVisible}
           onAnalyticsChange={setAnalyticsVisible}
+          onLeave={() => void leaveInterview()}
         />
         <StartupErrorScreen
           message={session.error ?? "Unexpected startup error."}
-          onLeave={leaveInterview}
+          onLeave={() => void leaveInterview()}
         />
       </div>
     );
   }
 
   const thinking = session.phase === "streaming";
-  const thinkingText = session.streamingText || "Drafting the next prompt";
+  const thinkingText = session.streamingText;
   const recordDisabled =
     session.phase !== "ready" ||
     session.turns.length === 0;
@@ -271,12 +371,14 @@ export function InterviewRoom({
     <div className="app-shell">
       <InterviewHeader
         jobTitle={session.jobTitle || jobTitle}
+        phase={session.phase}
         analyticsVisible={analyticsVisible}
         onAnalyticsChange={setAnalyticsVisible}
+        onLeave={() => void leaveInterview()}
       />
 
-      <div className="interview-layout">
-        <div className="min-h-0 min-w-0">
+      <main className="grid h-[calc(100dvh-var(--interview-header-height))] min-h-0 overflow-hidden min-[1180px]:min-h-[620px] min-[1180px]:grid-cols-[minmax(0,1fr)_var(--interview-sidebar-width)]">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <InterviewChat
             turns={session.turns}
             interviewerName={session.interviewerName}
@@ -288,38 +390,30 @@ export function InterviewRoom({
             audioByTurn={session.audioByTurn}
           />
 
-          <div className="space-y-3 border-t border-[var(--border-soft)] bg-white px-5 py-3 min-[900px]:px-8">
-            {session.captureNotice && (
-              <Notice tone="warning">{session.captureNotice}</Notice>
-            )}
+          {(session.captureNotice || session.submitError) && (
+            <div className="space-y-3 border-t border-[var(--border-soft)] bg-white px-5 py-3 min-[900px]:px-8">
+              {session.captureNotice && (
+                <Notice tone="warning">{session.captureNotice}</Notice>
+              )}
 
-            {session.submitError && (
-              <Notice tone="danger">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span>{session.submitError}</span>
-                  {session.canRetrySubmit && (
-                    <button
-                      type="button"
-                      onClick={() => void session.retrySubmit()}
-                      className="rounded-[9px] border border-[var(--danger-border)] bg-white px-3 py-2 text-sm font-medium text-[#a6302d] transition hover:bg-[#fff7f7]"
-                    >
-                      Retry answer
-                    </button>
-                  )}
-                </div>
-              </Notice>
-            )}
-
-            {session.phase === "completed" && (
-              <Notice tone="warning">
-                {session.finalEvaluation
-                  ? `This interview is complete. Final score ${session.finalEvaluation.overallScore}/100.`
-                  : "This interview is complete."}{" "}
-                You can return to the roles list and review the session from the
-                home screen.
-              </Notice>
-            )}
-          </div>
+              {session.submitError && (
+                <Notice tone="danger">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span>{session.submitError}</span>
+                    {session.canRetrySubmit && (
+                      <button
+                        type="button"
+                        onClick={() => void session.retrySubmit()}
+                        className="rounded-[9px] border border-[var(--danger-border)] bg-white px-3 py-2 text-sm font-medium text-[#a6302d] transition hover:bg-[#fff7f7]"
+                      >
+                        Retry answer
+                      </button>
+                    )}
+                  </div>
+                </Notice>
+              )}
+            </div>
+          )}
 
           <RecordButton
             isRecording={session.isRecording}
@@ -333,14 +427,16 @@ export function InterviewRoom({
             onStart={session.startRecording}
             onStop={session.stopAndSubmit}
           />
-        </div>
+        </section>
 
-        <InterviewSidebar
-          analyticsVisible={analyticsVisible}
-          panel={session.panel}
-          jobDescription={session.jobDescription || jobDescription}
-        />
-      </div>
+        <div className="hidden min-h-0 min-[1180px]:block">
+          <InterviewSidebar
+            analyticsVisible={analyticsVisible}
+            panel={session.panel}
+            jobDescription={session.jobDescription || jobDescription}
+          />
+        </div>
+      </main>
     </div>
   );
 }

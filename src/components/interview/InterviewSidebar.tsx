@@ -60,7 +60,7 @@ export function InterviewSidebar({
   jobDescription: string;
 }) {
   return (
-    <aside className="soft-scrollbar flex max-h-[calc(100dvh-var(--interview-header-height))] flex-col gap-5 overflow-y-auto border-l border-[var(--border-soft)] bg-[var(--sidebar-bg)] p-5">
+    <aside className="soft-scrollbar flex h-full max-h-[calc(100dvh-var(--interview-header-height))] flex-col gap-5 overflow-y-auto border-l border-[var(--border-soft)] bg-[var(--sidebar-bg)] p-5">
       {analyticsVisible ? (
         panel ? (
           <DecisionPanel panel={panel} />
