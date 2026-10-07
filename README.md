@@ -394,3 +394,28 @@ The final score is calculated from the saved decisions, which makes the result:
 The next question is returned through Server-Sent Events.
 
 This allows the interface to show the question while it is being generated instead of waiting for the full response.
+
+
+---
+
+## 9. Conversational Evaluation Loop
+
+The repository includes an evaluation harness for reviewing interview quality before changing prompts or agent behavior.
+
+The loop is:
+
+1. Run real interviews and review saved sessions.
+2. Export a session into an eval-case draft:
+   `npm run eval:export -- <session-id> evals/my-case.json`
+3. Replace the placeholder ratings with human labels for relevance, follow-up quality, evidence grounding, coherence, and overall pass/fail.
+4. Keep a small set of human-reviewed calibration cases and a separate regression suite.
+5. Run the LLM-as-judge evaluation:
+   `npm run eval:conversation -- --suite evals/conversation-cases.json --output evals/latest-results.json`
+6. Save an accepted baseline:
+   `npm run eval:conversation -- --suite evals/conversation-cases.json --write-baseline evals/baseline.json`
+7. Before a prompt or interview-policy change, compare against the baseline:
+   `npm run eval:conversation -- --suite evals/conversation-cases.json --baseline evals/baseline.json`
+
+The runner reports judge/human pass agreement, mean rating delta, judge rating, and p50 evaluation latency. The regression gate fails when those metrics degrade beyond the configured thresholds.
+
+An example suite is available at `evals/conversation-cases.example.json`. It is intentionally synthetic; production calibration should use human-reviewed real sessions.

@@ -1,0 +1,48 @@
+[
+  {
+    "id": "calibration-good-follow-up",
+    "kind": "calibration",
+    "role": "Senior Backend Engineer",
+    "conversation": [
+      {
+        "question": "Tell me about a production incident you handled.",
+        "answer": "A queue consumer fell behind after a deployment. I traced it to a slow database query and rolled back while we added an index."
+      },
+      {
+        "question": "How did you verify the index fixed the bottleneck before redeploying?",
+        "answer": "We replayed a production-sized batch in staging, compared p95 processing time, and added queue-lag alerts before redeploying."
+      }
+    ],
+    "human": {
+      "relevance": 5,
+      "followUpQuality": 5,
+      "evidenceGrounding": 5,
+      "coherence": 5,
+      "pass": true,
+      "notes": "Follow-up probes a concrete claim and the evidence supports the evaluation."
+    }
+  },
+  {
+    "id": "regression-topic-jump",
+    "kind": "regression",
+    "role": "Senior Backend Engineer",
+    "conversation": [
+      {
+        "question": "Tell me about a production incident you handled.",
+        "answer": "A queue consumer fell behind after a deployment and we traced it to a slow query."
+      },
+      {
+        "question": "What is your favorite programming language?",
+        "answer": "Python."
+      }
+    ],
+    "human": {
+      "relevance": 2,
+      "followUpQuality": 1,
+      "evidenceGrounding": 3,
+      "coherence": 2,
+      "pass": false,
+      "notes": "The agent abandons a useful incident thread instead of probing the failure and remediation."
+    }
+  }
+]
